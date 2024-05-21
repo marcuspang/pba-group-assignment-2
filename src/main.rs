@@ -11,8 +11,10 @@
 //! it is not secure and make the point that the most straight-forward approach isn't always the
 //! best, and can sometimes be trivially broken.
 
+use std::iter::zip;
+
 use aes::{
-    cipher::{generic_array::GenericArray, BlockCipher, BlockDecrypt, BlockEncrypt, KeyInit},
+    cipher::{generic_array::GenericArray, BlockCipher, BlockDecrypt, BlockEncrypt, Key, KeyInit},
     Aes128,
 };
 
@@ -95,12 +97,29 @@ fn group(data: Vec<u8>) -> Vec<[u8; BLOCK_SIZE]> {
 
 /// Does the opposite of the group function
 fn un_group(blocks: Vec<[u8; BLOCK_SIZE]>) -> Vec<u8> {
-    todo!()
+    let mut data = Vec::new();
+    for block in blocks {
+        data.extend_from_slice(&block);
+    }
+    data
 }
 
 /// Does the opposite of the pad function.
 fn un_pad(data: Vec<u8>) -> Vec<u8> {
-    todo!()
+    let last_digit = data.last().unwrap();
+    let size = data.len();
+
+    let mut is_padded = true;
+    for i in size - 1..size - last_digit {
+        if data[i] != last_digit {
+            is_padded = false;
+            break;
+        }
+    }
+    if is_padded {
+        return data.truncate(size - last_digit);
+    }
+    return data;
 }
 
 /// The first mode we will implement is the Electronic Code Book, or ECB mode.
@@ -111,12 +130,28 @@ fn un_pad(data: Vec<u8>) -> Vec<u8> {
 /// One good thing about this mode is that it is parallelizable. But to see why it is
 /// insecure look at: https://www.ubiqsecurity.com/wp-content/uploads/2022/02/ECB2.png
 fn ecb_encrypt(plain_text: Vec<u8>, key: [u8; 16]) -> Vec<u8> {
-    todo!()
+    let mut cipher_text = Vec::new();
+    let padded_groups = group(pad(plain_text));
+    for block in padded_groups {
+        let encrypted_block = aes_encrypt(block, &key);
+        cipher_text.extend_from_slice(&encrypted_block);
+    }
+    cipher_text
 }
 
 /// Opposite of ecb_encrypt.
 fn ecb_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
-    todo!()
+    let padded_groups = un_group(un_pad(cipher_text));
+    let mut plaintext = Vec::new();
+    for block in padded_groups {
+        let decrypted_block = aes_decrypt(block, &key);
+        plaintext.extend_from_slice(&decrypted_block);
+    }
+    plaintext
+}
+
+fn xor(a: Vec<u8>, b: Vec<u8>) {
+    zip(a, b).map(|(x, y)| x ^ y).collect::<Vec<u8>>()
 }
 
 /// The next mode, which you can implement on your own is cipherblock chaining.
@@ -133,12 +168,39 @@ fn ecb_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
 /// is inserted as the first block of ciphertext.
 fn cbc_encrypt(plain_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
     // Remember to generate a random initialization vector for the first block.
+    let padded_groups = group(pad(plain_text));
+    let cipher_text = Vec::new();
+    let iv = KeyInit::new(8);
+    cipher_text.append(iv);
 
-    todo!()
+    for i in 0..padded_groups.len() {
+        let mut xored_block;
+        if i == 0 {
+            xored_block = xor(padded_groups[i], cipher_text[0]);
+        } else {
+            xored_block = xor(padded_groups[i], cipher_text[i - 1]);
+        }
+        let encrypted_block = aes_encrypt(xored_block, &key);
+        cipher_text.extend_from_slice(&encrypted_block);
+    }
+    cipher_text
 }
 
 fn cbc_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
-    todo!()
+    let encrypted_groups = group(cipher_text);
+    let plaintext_groups = Vec::new();
+    for i in encrypted_groups.len() - 1..0 {
+        let mut xored_block;
+        if i == 0 {
+            xored_block = xor(padded_groups[i], cipher_text[0]);
+        } else {
+            xored_block = xor(padded_groups[i], encrypted_groups[i - 1]);
+        }
+        let decrypted_block = aes_decrypt(xored_block, &key);
+        plaintext_groups.push(un_pad(decrypted_block));
+    }
+    plaintext_groups.reverse();
+    un_group(plaintext_groups)
 }
 
 /// Another mode which you can implement on your own is counter mode.
@@ -159,9 +221,30 @@ fn cbc_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
 /// inserted as the first block of the ciphertext.
 fn ctr_encrypt(plain_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
     // Remember to generate a random nonce
-    todo!()
+    let nonce = [u8; BLOCK_SIZE];
+    let cipher_text = Vec::new();
+    let padded_groups = group(pad(plain_text));
+
+    for i in 0..padded_groups.len() {
+        nonce.append(i);
+        let xored_block = xor(padded_groups[i], nonce);
+        nonce.pop();
+        let encrypted_block = aes_encrypt(xored_block, &key);
+        cipher_text.extend_from_slice(&encrypted_block);
+    }
+    cipher_text
 }
 
 fn ctr_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
-    todo!()
+    let iv = cipher_text[0];
+    let mut plaintext_groups = Vec::new();
+
+    for i in 0..cipher_text.len() {
+        iv.append(i);
+        let xored_block = xor(cipher_text[i], iv);
+        iv.pop();
+        let decrypted_block = aes_decrypt(xored_block, &key);
+        plaintext_groups.push(un_pad(decrypted_block));
+    }
+    un_group(plaintext_groups)
 }
