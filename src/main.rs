@@ -105,21 +105,26 @@ fn un_group(blocks: Vec<[u8; BLOCK_SIZE]>) -> Vec<u8> {
 
 /// Does the opposite of the pad function.
 fn un_pad(data: Vec<u8>) -> Vec<u8> {
-    let last_digit = *data.last().unwrap() as usize;
-    let size = data.len();
+    if data.is_empty() {
+        return data;
+    }
+    let number_pad_bytes = *data.last().unwrap() as usize;
+    // check if it was possible to have been padded
+    if number_pad_bytes > data.len() || number_pad_bytes > BLOCK_SIZE {
+        return data;
+    }
 
-    let mut data = data;
-
-    if last_digit <= data.len() {
+    // check all bytes have the same value as number_pad_bytes, in padded bytes
+    if number_pad_bytes <= data.len() {
         let mut is_padded = true;
-        for i in size - 1..size - last_digit {
-            if data[i] != (last_digit as u8) {
+        for i in (data.len() - number_pad_bytes)..data.len() {
+            if data[i] != (number_pad_bytes as u8) {
                 is_padded = false;
                 break;
             }
         }
         if is_padded {
-            data.truncate(data.len() - last_digit);
+            return data[..data.len() - number_pad_bytes].to_vec();
         }
     }
     data
