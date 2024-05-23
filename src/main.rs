@@ -180,11 +180,11 @@ fn xor(a: &[u8; BLOCK_SIZE], b: &[u8; BLOCK_SIZE]) -> [u8; BLOCK_SIZE] {
 /// is inserted as the first block of ciphertext.
 fn cbc_encrypt(plain_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
     // Remember to generate a random initialization vector for the first block.
-    let iv = [0u8; BLOCK_SIZE];
+    let iv = rand::thread_rng().gen::<[u8; BLOCK_SIZE]>();
     let padded_groups = group(pad(plain_text));
     let mut cipher_text = Vec::new();
 
-    cipher_text.extend_from_slice(&iv);
+    cipher_text.extend_from_slice(iv.as_slice());
     let mut prev_group = iv;
 
     for group in padded_groups {
